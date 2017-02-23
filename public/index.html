@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--Import Google Icon Font-->
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <!--Import materialize.css-->
+  <!-- Compiled and minified CSS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.97.8/css/materialize.min.css">
+
+  <!--Let browser know website is optimized for mobile-->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <style>
+  ::-webkit-scrollbar {
+    display:none;
+  }
+  .collection { cursor: pointer;}
+  </style>
+</head>
+
+<body>
+  <div class="row">
+    <div class="col s3" style="padding:0; margin:0; overflow-y:auto; overflow-x:hidden; height:1080px; -ms-overflow-style: none;">
+      <!-- Grey navigation panel -->
+      <ul class="collection"  style="padding:0; margin:0;"></ul>
+    </div>
+
+    <div class="col s9" style="padding:0; margin:0; max-height:1080px;">
+      <!-- Teal page content  -->
+      <nav>
+        <div class="nav-wrapper">
+          <div class="col s12">
+            <a href="javascript:void(0);" class="breadcrumb"><span id="modifyDate"></span></a>
+          </div>
+        </div>
+      </nav>
+      <textarea style="height:1000px;" class="textarea" width="100%" rows="1000" placeholder="새로운 메모를 입력해보세요^^"></textarea>
+    </div>
+
+    <div class="fixed-action-btn" style="bottom: 45px; right: 24px;">
+      <a class="btn-floating btn-large waves-effect waves-light red" onclick="initMemo();"><i class="material-icons">add</i></a>
+    </div>
+
+    <div class="preloader-wrapper big active" style="position:absolute; z-index:1000; left:50%; top:50%; display:none;">
+      <div class="spinner-layer spinner-blue-only">
+        <div class="circle-clipper left">
+          <div class="circle"></div>
+        </div><div class="gap-patch">
+          <div class="circle"></div>
+        </div><div class="circle-clipper right">
+          <div class="circle"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!--Import jQuery before materialize.js-->
+  <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.97.8/js/materialize.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.17.1/moment.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.17.1/locale/ko.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/3.6.10/firebase.js"></script>
+  <script>
+  let auth, database, userInfo, selectedKey;
+  // Initialize Firebase
+  let config = {
+    apiKey: "AIzaSyB2XGTay8gqBZQ4g1Q8PUmZTd1ald00crk",
+    authDomain: "memodemo-71992.firebaseapp.com",
+    databaseURL: "https://memodemo-71992.firebaseio.com",
+    storageBucket: "memodemo-71992.appspot.com",
+    messagingSenderId: "742282931962"
+  };
+  firebase.initializeApp(config);
+  auth = firebase.auth();
+  database = firebase.database();
+
+  // Start a sign in process for an unauthenticated user.
+  var provider = new firebase.auth.GoogleAuthProvider();
+  provider.addScope('profile');
+  provider.addScope('email');
+  auth.onAuthStateChanged(function(user) {
+    if(user) {
+      //  메모 리스트 출력
+      userInfo = user;
+      get_memo_list();
+    }else {
+      // 인증 실패
+      // Using a redirect.
+      firebase.auth().signInWithRedirect(provider);
+    }
+  });
+
+  function get_memo_list(){
+    let memoRef = database.ref('memos/' + userInfo.uid);
+    memoRef.on('child_added', on_child_added);
+    memoRef.on('child_changed', function(data) {
+      const key = data.key;
+      let txt = data.val().txt;
+      let updateDate = data.val().updateDate;
+
+      $("#" + key + " > .txt_createDate").text(updateDate);
+      $("#" + key + " > .txt_title").text(txt);
+    });
+  }
+
+  function on_child_added(data) {
+    const key = data.key;
+    let memoData = data.val();
+    let txt = memoData.txt;
+    let title = txt.substr(0, 15);
+    let firstTxt = txt.substr(0, 1);
+    let updateDate = memoData.updateDate;
+
+    let html = "<li id='" + key + "' class='collection-item avatar' onclick='fn_get_data_one(this.id);'>" +
+              "<i class='material-icons circle blue'>comment</i>" +
+              "<span class='txt_createDate'>" + updateDate + "</span>" +
+              "<p class='txt_title'>" + title + "<br>" +
+              "</p>" +
+              "<a href='javascript:void(0);' onclick='fn_delete_data(\"" + key + "\");' class='secondary-content'><i class='material-icons'>delete</i></a>"
+              "</li>";
+
+    $(".collection").append(html);
+  }
+
+  function fn_delete_data(key) {
+    if (confirm('선택한 메모를 삭제하시겠습니까?')) {
+      let memoRef = database.ref('memos/' + userInfo.uid + "/" + key);
+      memoRef.remove();
+      $("#" + key).remove();
+      initMemo();
+    }
+  }
+
+  function fn_get_data_one(key) {
+    selectedKey = key;
+    let memoRef = database.ref('memos/' + userInfo.uid + "/" + key).once('value').then(function(snapshot) {
+      $(".textarea").val(snapshot.val().txt);
+      $("#modifyDate").html(snapshot.val().updateDate);
+    });
+  }
+
+  function save_data() {
+    let memoRef = database.ref('memos/' + userInfo.uid);
+    let txt = $(".textarea").val();
+
+    if (txt == '') {
+      return;
+    }
+
+    if (selectedKey) {
+      memoRef = database.ref('memos/' + userInfo.uid + "/" + selectedKey);
+      memoRef.update({
+        txt: txt,
+        updateDate: moment().format('llll')
+      });
+    }else {
+      //push
+      memoRef.push({
+        txt: txt,
+        createDate: moment().format('llll'),
+        updateDate: moment().format('llll')
+      });
+    }
+  }
+
+  function initMemo() {
+    $('.textarea').val('');
+    $("#modifyDate").html('');
+    selectedKey = null;
+  }
+
+  $(function(){
+    $(".textarea").blur(function() {
+      save_data();
+    });
+  });
+  </script>
+
+</body>
+</html>
